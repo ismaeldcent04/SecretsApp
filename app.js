@@ -8,6 +8,7 @@ const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
 const app = express();
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
+//const FacebookStrategy = require("passport-facebook");
 const findOrCreate = require("mongoose-findorcreate");
 
 app.use(express.static("public"));
@@ -31,6 +32,8 @@ const userSchema = new mongoose.Schema({
   email: String,
   password: String,
   googleId: String,
+  //facebookId: String,
+  secret: String,
 });
 
 userSchema.plugin(passportLocalMongoose);
@@ -58,12 +61,11 @@ passport.deserializeUser(function (user, cb) {
 passport.use(
   new GoogleStrategy(
     {
-      clientID: process.env.CLIENT_ID,
-      clientSecret: process.env.CLIENT_SECRET,
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       callbackURL: "http://localhost:3000/auth/google/secrets",
     },
     function (accessToken, refreshToken, profile, cb) {
-      console.log(profile);
       User.findOrCreate({ googleId: profile.id }, function (err, user) {
         return cb(err, user);
       });
@@ -71,6 +73,20 @@ passport.use(
   )
 );
 
+// passport.use(
+//   new FacebookStrategy(
+//     {
+//       clientID: process.env.FACEBOOK_CLIENT_ID,
+//       clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
+//       callbackURL: "http://localhost:3000/auth/facebook/secrets",
+//     },
+//     function (accessToken, refreshToken, profile, cb) {
+//       User.findOrCreate({ facebookId: profile.id }, function (err, user) {
+//         return cb(err, user);
+//       });
+//     }
+//   )
+// );
 app.get("/", function (req, res) {
   res.render("home");
 });
@@ -86,16 +102,37 @@ app.get(
     res.redirect("/secrets");
   }
 );
+
 app.get("/login", function (req, res) {
   res.render("login");
 });
 app.get("/register", function (req, res) {
   res.render("register");
 });
+// app.get("/auth/facebook", passport.authenticate("facebook"));
+
+// app.get(
+//   "/auth/facebook/secrets",
+//   passport.authenticate("facebook", { failureRedirect: "/login" }),
+//   function (req, res) {
+//     // Successful authentication, redirect home.
+//     res.redirect("/secrets");
+//   }
+// );
 
 app.get("/secrets", function (req, res) {
+  User.find({ "secret:": { $ne: null } }, function (err, foundusers) {
+    if (err) {
+      console.log(err);
+    } else {
+      res.render("secrets", { userswithsecrets: foundusers });
+    }
+  });
+});
+
+app.get("/submit", function (req, res) {
   if (req.isAuthenticated()) {
-    res.render("secrets");
+    res.render("submit");
   } else {
     res.redirect("/login");
   }
@@ -142,7 +179,19 @@ app.post("/login", function (req, res) {
     }
   });
 });
-
+app.post("/submit", function (req, res) {
+  const submittedsecret = req.body.secret;
+  User.findById(req.user.id, function (err, founduser) {
+    if (err) {
+      console.log(err);
+    } else {
+      founduser.secret = submittedsecret;
+      founduser.save(function () {
+        res.redirect("/secrets");
+      });
+    }
+  });
+});
 app.listen(3000, function () {
   console.log("Server is up and running on port 3000");
 });
